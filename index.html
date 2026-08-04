@@ -191,6 +191,15 @@
     .rec-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:5px;vertical-align:middle;animation:pulse 1s infinite;}
     @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
     .rec-player{width:100%;margin-top:4px;}
+    .result-box{background:rgba(255,255,255,0.55);border:1px dashed rgba(214,138,166,0.45);border-radius:14px;padding:12px 14px;margin-top:10px;}
+    .result-box.empty{text-align:center;color:var(--muted);font-size:13px;line-height:1.7;}
+    .result-box .rb-hint{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5;}
+    .result-box .rb-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+    .result-box .rb-row audio.rec-player{flex:1 1 200px;min-width:0;}
+    .result-box .rb-meta{font-size:12px;color:var(--muted);margin-top:6px;}
+    .result-box .rb-meta b{color:#5A3A42;font-weight:700;}
+    .btn.discard-rec{background:var(--danger);color:#fff;font-weight:700;padding:8px 14px;border-radius:10px;display:inline-flex;align-items:center;gap:5px;font-size:13.5px;}
+    .btn.discard-rec:hover{background:var(--danger-hover);}
 
     .table-wrap{margin-top:6px;}
     .prow{display:flex;align-items:flex-start;gap:10px;padding:11px 4px;border-bottom:1px dashed var(--border);}
@@ -236,6 +245,9 @@
     .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
     .note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6;}
+    .follow-area{border-top:1px dashed var(--border);padding-top:12px;margin-top:4px;}
+    .audio-card .track-name{font-size:15px;}
+    .audio-card .track-meta{font-size:12px;color:var(--muted);margin-top:3px;}
     h3{font-size:15px;font-weight:700;color:var(--text);margin:0 0 10px;letter-spacing:-0.01em;}
   </style>
 </head>
@@ -302,6 +314,20 @@
       </div>
     </section>
 
+    <!-- 听力库 -->
+    <section id="listen" class="tab-panel">
+      <div class="panel">
+        <h2>🎧 听力库 <small>导入音频 · 听 / 跟读</small></h2>
+        <p class="sub">把你自己的俄语音频（或任何语言）导入进来，纯听磨耳朵，或跟读对照。</p>
+        <div class="form-actions">
+          <button class="btn primary" id="btn-import-audio">📥 导入音频（可多选）</button>
+          <button class="btn ghost small" id="btn-del-all-audio" style="display:none">清空听力库</button>
+        </div>
+        <input type="file" id="audio-file" accept="audio/*" multiple style="display:none" />
+        <div id="audio-list"></div>
+      </div>
+    </section>
+
     <!-- 统计 -->
     <section id="stats" class="tab-panel">
       <div class="panel">
@@ -342,6 +368,7 @@
     <button class="tab-btn active" data-tab="today"><span class="t-ico">🌅</span>今日</button>
     <button class="tab-btn" data-tab="practice"><span class="t-ico">🗣️</span>练习</button>
     <button class="tab-btn" data-tab="library"><span class="t-ico">📚</span>素材库</button>
+    <button class="tab-btn" data-tab="listen"><span class="t-ico">🎧</span>听力库</button>
     <button class="tab-btn" data-tab="stats"><span class="t-ico">📊</span>统计</button>
     <button class="tab-btn" data-tab="data"><span class="t-ico">💾</span>数据</button>
   </nav>
@@ -427,7 +454,7 @@
   }
 
   function totalMinutes(){let m=0;for(const d in state.logs){for(const t in state.logs[d]){m+=(state.logs[d][t].minutes||0);}}return m;}
-  function todayDoneCount(){const t=state.logs[todayStr()];if(!t)return 0;return Object.values(t).filter(r=>r.done).length;}
+  function todayDoneCount(){const t=state.logs[todayStr()];if(!t)return 0;const ids=state.tracks.map(x=>x.id);return Object.keys(t).filter(k=>ids.includes(k)&&t[k].done).length;}
 
   /* ---------- 今日 ---------- */
   function renderToday(){
@@ -503,7 +530,22 @@
         '<button class="btn '+(timer?'warning':'success')+' small" id="p-timer-btn">'+(timer?'⏹ 停止计时':'▶ 开始计时')+'</button>'+
         (isSpeak?'<button class="btn '+(recOn?'danger':'secondary')+' small" id="p-rec-btn">'+(recOn?'⏹ 停止录音':'🎙️ 开始录音')+'</button>':'')+
       '</div>'+
-      (recUrl?'<audio class="rec-player" controls src="'+recUrl+'"></audio>':'')+
+      (recUrl?
+        '<div class="result-box">'+
+          '<div class="rb-row">'+
+            '<audio class="rec-player" controls src="'+recUrl+'"></audio>'+
+            '<button class="btn discard-rec" id="p-discard" title="丢弃这段录音（不会进回收站，因为没保存）">🗑 删除录音</button>'+
+          '</div>'+
+          '<div class="rb-meta">不满意就点 <b>🗑 删除录音</b>；想保留就点下方「💾 保存本次练习」。</div>'+
+        '</div>'
+        :
+        (isSpeak?
+          '<div class="result-box empty">'+
+            '🎙️ <b>录完一段</b>后，这里会出现播放器和 <b>🗑 删除录音</b> 键。'+
+            '<div class="rb-hint">不满意就随时删掉，不会留下任何痕迹。</div>'+
+          '</div>'
+          :'')
+      )+
       '<div class="rec-status" id="p-status">'+(recOn?'<span class="rec-dot"></span>录音中…':'')+(timer?'　计时中…':'　准备就绪')+'</div>'+
       (isSpeak?'<div class="form-actions" style="justify-content:center;"><button class="btn ghost tiny" disabled title="预留接口，后续接入">🤖 AI 发音评分（即将推出）</button></div>':'')+
     '</div>';
@@ -518,6 +560,7 @@
     }
     $('p-timer-btn').onclick=toggleTimer;
     if(isSpeak)$('p-rec-btn').onclick=toggleRec;
+    const db=$('p-discard');if(db)db.onclick=()=>{if(recUrl)URL.revokeObjectURL(recUrl);recUrl=null;renderPractice();toast('已删除录音 🗑');};
     $('p-save').onclick=saveSession;
   }
 
@@ -578,6 +621,166 @@
     $('lib-add').onclick=()=>{const v=$('lib-new').value.trim();if(!v){toast('先写点什么');return;}state.prompts[libTrack]=state.prompts[libTrack]||[];state.prompts[libTrack].push(v);save();$('lib-new').value='';renderLibrary();toast('已添加 🌱');};
   }
   function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+  /* ---------- 听力库（IndexedDB 存音频） ---------- */
+  const AUDIO_DB='langPlanetAudio';
+  let audioDB=null, audioClips=[], curPlayAudio=null, followState=null;
+  function openAudioDB(){
+    return new Promise((res,rej)=>{
+      const req=indexedDB.open(AUDIO_DB,1);
+      req.onupgradeneeded=e=>{const db=e.target.result;if(!db.objectStoreNames.contains('clips'))db.createObjectStore('clips',{keyPath:'id'});};
+      req.onsuccess=e=>{audioDB=e.target.result;res(audioDB);};
+      req.onerror=()=>rej(new Error('db open failed'));
+    });
+  }
+  function idbAll(){return new Promise((res)=>{if(!audioDB)return res([]);const tx=audioDB.transaction('clips','readonly');const r=tx.objectStore('clips').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>res([]);});}
+  function idbPut(clip){return new Promise((res,rej)=>{const tx=audioDB.transaction('clips','readwrite');tx.objectStore('clips').put(clip);tx.oncomplete=()=>res();tx.onerror=()=>rej(new Error('put failed'));});}
+  function idbDel(id){return new Promise((res)=>{const tx=audioDB.transaction('clips','readwrite');tx.objectStore('clips').delete(id);tx.oncomplete=()=>res();tx.onerror=()=>res();});}
+  function getDuration(url){return new Promise((res)=>{const a=new Audio();a.preload='metadata';a.onloadedmetadata=()=>res(isFinite(a.duration)?a.duration:null);a.onerror=()=>res(null);a.src=url;});}
+
+  function loadAudioClips(){
+    if(typeof indexedDB==='undefined'){renderListen();return;}
+    openAudioDB().then(()=>idbAll()).then(list=>{
+      audioClips=list.map(c=>({...c,url:URL.createObjectURL(c.blob)}));
+      renderListen();
+    }).catch(()=>renderListen());
+  }
+
+  async function importAudio(files){
+    if(!audioDB){try{await openAudioDB();}catch(e){toast('音频库不可用');return;}}
+    let n=0;
+    for(const file of files){
+      const id='a'+Date.now()+Math.random().toString(36).slice(2,6);
+      const name=(file.name||'').replace(/\.[^.]+$/,'')||('音频'+(n+1));
+      const clip={id,name,type:file.type,size:file.size,addedAt:todayStr(),blob:file,duration:null};
+      const tmp=URL.createObjectURL(file);
+      try{clip.duration=await getDuration(tmp);}catch(e){}
+      URL.revokeObjectURL(tmp);
+      try{await idbPut(clip);}catch(e){continue;}
+      audioClips.push({...clip,url:URL.createObjectURL(file)});
+      n++;
+    }
+    toast('已导入 '+n+' 个音频 🎧');
+    renderListen();
+  }
+
+  function renderListen(){
+    const list=$('audio-list');const delAll=$('btn-del-all-audio');
+    if(delAll)delAll.style.display=audioClips.length?'inline-block':'none';
+    if(!list)return;
+    if(!audioClips.length){list.innerHTML='<div class="empty-state"><span class="e-ico">🎧</span>还没有音频。点上方「导入音频」选你的俄语音频吧～</div>';return;}
+    list.innerHTML='';
+    audioClips.forEach(c=>{
+      const el=document.createElement('div');el.className='card audio-card';el.dataset.id=c.id;
+      const dur=c.duration?fmt(Math.round(c.duration)):(c.blob&&c.blob.size?('约 '+Math.round(c.blob.size/1024)+' KB'):'');
+      el.innerHTML=
+        '<div class="track-card">'+
+          '<div class="track-emoji">🎧</div>'+
+          '<div class="track-main"><div class="track-name">'+escapeHtml(c.name)+'</div>'+
+          '<div class="track-meta">'+(dur?('时长 '+dur+' · '):'')+'导入 '+c.addedAt+'</div></div>'+
+          '<div class="track-actions">'+
+            '<button class="btn success tiny" data-play>▶ 听</button>'+
+            '<button class="btn primary tiny" data-follow>🗣️ 跟读</button>'+
+            '<button class="btn danger tiny" data-del>删除</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="follow-area" style="display:none;"></div>';
+      list.appendChild(el);
+    });
+    list.querySelectorAll('.audio-card').forEach(card=>{
+      const id=card.dataset.id;const c=audioClips.find(x=>x.id===id);
+      card.querySelector('[data-play]').onclick=()=>playClip(c);
+      card.querySelector('[data-follow]').onclick=()=>toggleFollow(card,c);
+      card.querySelector('[data-del]').onclick=async()=>{await idbDel(id);audioClips=audioClips.filter(x=>x.id!==id);if(c.url)URL.revokeObjectURL(c.url);renderListen();toast('已删除');};
+    });
+  }
+
+  function playClip(c){
+    if(curPlayAudio){curPlayAudio.pause();curPlayAudio=null;}
+    const a=new Audio(c.url);curPlayAudio=a;
+    a.play().catch(()=>toast('播放失败，可能是文件格式不支持'));
+    a.onended=()=>{curPlayAudio=null;};
+  }
+
+  function followStopAll(){
+    if(followState){
+      if(followState.timer)clearInterval(followState.timer);
+      if(followState.rec&&followState.on){try{followState.rec.stop();}catch(e){}}
+      if(followState.url)URL.revokeObjectURL(followState.url);
+      followState=null;
+    }
+  }
+
+  function toggleFollow(card,c){
+    const area=card.querySelector('.follow-area');
+    const isOpen=area.style.display!=='none';
+    document.querySelectorAll('.follow-area').forEach(a=>{if(a!==area)a.style.display='none';});
+    if(isOpen){area.style.display='none';followStopAll();return;}
+    area.style.display='block';followState={clipId:c.id};renderFollow(area,c);
+  }
+
+  function renderFollow(area,c){
+    const secs=followState.secs||0, on=followState.on, timer=followState.timer;
+    area.innerHTML=
+      '<p class="sub" style="margin:0 0 10px;">① 先听上方原声 → ② 🎙️ 录音跟读 → ③ 对比回放</p>'+
+      '<audio class="rec-player" controls src="'+c.url+'"></audio>'+
+      '<div class="rec-area">'+
+        '<div class="timer'+(timer?' run':'')+'" id="f-timer">'+fmt(secs)+'</div>'+
+        '<div class="form-actions" style="justify-content:center;">'+
+          '<button class="btn '+(timer?'warning':'success')+' small" id="f-timer-btn">'+(timer?'⏹ 停止计时':'▶ 开始计时')+'</button>'+
+          '<button class="btn '+(on?'danger':'secondary')+' small" id="f-rec-btn">'+(on?'⏹ 停止录音':'🎙️ 开始录音')+'</button>'+
+        '</div>'+
+        (followState.url?
+          '<div class="result-box" style="margin-top:6px;">'+
+            '<div class="rb-row">'+
+              '<audio class="rec-player" controls src="'+followState.url+'"></audio>'+
+              '<button class="btn discard-rec" data-f-discard title="丢弃这段跟读录音">🗑 删除录音</button>'+
+            '</div>'+
+            '<div class="rb-meta">不满意就点 <b>🗑 删除录音</b>，可重新跟读。</div>'+
+          '</div>'
+          :
+          '<div class="result-box empty" style="margin-top:6px;">🎙️ 录完跟读后，这里会显示 <b>🗑 删除录音</b> 键。</div>'
+        )+
+        '<div class="rec-status" id="f-status">'+(on?'<span class="rec-dot"></span>录音中…':'准备就绪')+'</div>'+
+      '</div>'+
+      '<button class="btn primary block" id="f-save">💾 保存本次跟读</button>';
+    $('f-timer-btn').onclick=()=>followToggleTimer(area,c);
+    $('f-rec-btn').onclick=()=>followToggleRec(area,c);
+    const fd=area.querySelector('[data-f-discard]');if(fd)fd.onclick=()=>{if(followState&&followState.url)URL.revokeObjectURL(followState.url);followState.url=null;renderFollow(area,c);toast('已删除跟读录音 🗑');};
+    $('f-save').onclick=()=>followSave(area,c);
+  }
+
+  function followToggleTimer(area,c){
+    if(followState.timer){clearInterval(followState.timer);followState.timer=null;}
+    else{followState.timer=setInterval(()=>{followState.secs=(followState.secs||0)+1;const t=area.querySelector('#f-timer');if(t){t.textContent=fmt(followState.secs);t.classList.add('run');}},1000);}
+    renderFollow(area,c);
+  }
+
+  async function followToggleRec(area,c){
+    if(followState.on){if(followState.rec)followState.rec.stop();return;}
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const rec=new MediaRecorder(stream);const chunks=[];
+      rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
+      rec.onstop=()=>{const blob=new Blob(chunks,{type:'audio/webm'});if(followState.url)URL.revokeObjectURL(followState.url);followState.url=URL.createObjectURL(blob);followState.on=false;stream.getTracks().forEach(t=>t.stop());renderFollow(area,c);toast('🎧 录音完成，可对比');};
+      rec.start();followState.on=true;followState.secs=followState.secs||0;
+      renderFollow(area,c);toast('🎙️ 开始录音');
+    }catch(e){toast('无法录音：'+(e.name==='NotAllowedError'?'权限被拒绝':e.name));}
+  }
+
+  function followSave(area,c){
+    const secs=followState?followState.secs||0:0;
+    const minutes=secs>0?Math.max(1,Math.round(secs/60)):1;
+    const d=todayStr();state.logs[d]=state.logs[d]||{};
+    const key='listen:'+c.id;
+    const ex=state.logs[d][key]||{done:false,minutes:0,hasAudio:false};
+    state.logs[d][key]={done:true,minutes:Math.max(ex.minutes,minutes),hasAudio:true,label:'🎧 '+c.name};
+    save();
+    if(followState&&followState.url)URL.revokeObjectURL(followState.url);
+    followState=null;area.style.display='none';
+    toast('💾 已保存跟读（'+minutes+' 分）');
+    renderToday();renderSplash();renderStats();
+  }
 
   /* ---------- 统计 ---------- */
   function renderStats(){
@@ -640,11 +843,13 @@
 
   /* ---------- Tab ---------- */
   function switchTab(name){
+    if(name!=='listen'){ if(curPlayAudio){curPlayAudio.pause();curPlayAudio=null;} followStopAll(); }
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===name));
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
     if(name==='today')renderToday();
     if(name==='practice')renderPractice();
     if(name==='library')renderLibrary();
+    if(name==='listen')renderListen();
     if(name==='stats')renderStats();
   }
 
@@ -668,11 +873,20 @@
   $('btn-import').onclick=()=>$('import-file').click();
   $('import-file').onchange=e=>{if(e.target.files[0])importData(e.target.files[0]);e.target.value='';};
   $('btn-clear').onclick=clearData;
+  $('btn-import-audio').onclick=()=>$('audio-file').click();
+  $('audio-file').onchange=e=>{if(e.target.files&&e.target.files.length)importAudio(e.target.files);e.target.value='';};
+  $('btn-del-all-audio').onclick=async()=>{
+    if(!confirm('清空听力库全部音频？此操作不可恢复！'))return;
+    if(audioDB){const tx=audioDB.transaction('clips','readwrite');tx.objectStore('clips').clear();}
+    audioClips.forEach(c=>{if(c.url)URL.revokeObjectURL(c.url);});
+    audioClips=[];followStopAll();renderListen();toast('听力库已清空');
+  };
 
   initTitle();
   curTrack=state.tracks.find(t=>t.type==='speak')?state.tracks.find(t=>t.type==='speak').id:state.tracks[0].id;
   libTrack=state.tracks.filter(t=>t.type==='speak')[0].id;
   renderAll();
+  loadAudioClips();
 })();
 </script>
 </body>
