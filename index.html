@@ -184,6 +184,15 @@
     .prompt-box{background:rgba(255,255,255,0.7);border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(255,255,255,0.7);
       font-size:18px;line-height:1.7;color:#3a3348;min-height:80px;display:flex;align-items:center;}
     .prompt-box.zh{font-size:20px;}
+    .prompt-row{display:flex;align-items:stretch;gap:10px;margin-bottom:14px;}
+    .prompt-row .prompt-box{flex:1;margin-bottom:0;}
+    .prompt-tts{flex-shrink:0;width:54px;border-radius:14px;border:1px solid rgba(255,255,255,0.7);
+      background:linear-gradient(180deg,#F3C9DC,#E39DB8);color:#fff;font-size:24px;cursor:pointer;
+      box-shadow:0 4px 12px rgba(214,138,166,0.25);transition:all .15s;
+      display:flex;align-items:center;justify-content:center;padding:0;}
+    .prompt-tts:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(214,138,166,0.35);}
+    .prompt-tts:active{transform:translateY(0);}
+    .prompt-tts.playing{background:linear-gradient(180deg,#E8B4CC,#C97497);animation:pulse 1.2s infinite;}
     .rec-area{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
     .timer{font-size:34px;font-weight:800;color:#5A3A42;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
     .timer.run{color:var(--rose);}
@@ -513,7 +522,10 @@
     const cur=prompts[curPromptIdx]||'';
     let html='';
     if(isSpeak){
-      html+='<div class="prompt-box '+(tr.lang==='zh'?'zh':'')+'">'+ (cur||'（暂无素材，去素材库添加）') +'</div>';
+      html+='<div class="prompt-row">'+
+        '<div class="prompt-box '+(tr.lang==='zh'?'zh':'')+'">'+ (cur||'（暂无素材，去素材库添加）') +'</div>'+
+        '<button class="prompt-tts" id="p-tts" title="🔊 浏览器内置示范发音（再次点击可停止）" aria-label="播放示范发音">🔊</button>'+
+      '</div>';
       if(prompts.length){
         html+='<div class="form-actions" style="justify-content:center;margin-bottom:14px;">'+
           '<button class="btn ghost small" id="p-prev">⬅️ 上句</button>'+
@@ -554,9 +566,18 @@
     body.innerHTML=html;
 
     if(isSpeak){
-      $('p-prev').onclick=()=>{curPromptIdx=(curPromptIdx-1+prompts.length)%prompts.length;renderPractice();};
-      $('p-next').onclick=()=>{curPromptIdx=(curPromptIdx+1)%prompts.length;renderPractice();};
-      $('p-rand').onclick=()=>{if(prompts.length)curPromptIdx=Math.floor(Math.random()*prompts.length);renderPractice();};
+      $('p-prev').onclick=()=>{if('speechSynthesis' in window)speechSynthesis.cancel();curPromptIdx=(curPromptIdx-1+prompts.length)%prompts.length;renderPractice();};
+      $('p-next').onclick=()=>{if('speechSynthesis' in window)speechSynthesis.cancel();curPromptIdx=(curPromptIdx+1)%prompts.length;renderPractice();};
+      $('p-rand').onclick=()=>{if('speechSynthesis' in window)speechSynthesis.cancel();if(prompts.length)curPromptIdx=Math.floor(Math.random()*prompts.length);renderPractice();};
+      const ttsBtn=$('p-tts');
+      if(ttsBtn){
+        const langCode=TTS_LANG[curTrack];
+        if(langCode && cur){
+          ttsBtn.onclick=()=>speakPrompt(cur,langCode,ttsBtn);
+        }else{
+          ttsBtn.disabled=true;ttsBtn.style.opacity='0.45';ttsBtn.title=cur?'当前语言未配置 TTS':'暂无文字可读';
+        }
+      }
     }
     $('p-timer-btn').onclick=toggleTimer;
     if(isSpeak)$('p-rec-btn').onclick=toggleRec;
@@ -565,6 +586,21 @@
   }
 
   function fmt(s){const m=Math.floor(s/60),x=s%60;return String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
+
+  const TTS_LANG={'en-sp':'en-US','zh-sp':'zh-CN','ru-sp':'ru-RU'};
+  function speakPrompt(text,langCode,btn){
+    if(!('speechSynthesis' in window)){toast('当前浏览器不支持语音合成 😅');return;}
+    if(!text){toast('暂无文字可读');return;}
+    // 点同一个按钮 → 停止
+    if(speechSynthesis.speaking && btn.dataset.playing==='1'){speechSynthesis.cancel();return;}
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang=langCode;u.rate=0.92;u.pitch=1.0;
+    btn.dataset.playing='1';btn.textContent='⏹';btn.classList.add('playing');
+    const cleanup=()=>{btn.dataset.playing='';btn.textContent='🔊';btn.classList.remove('playing');};
+    u.onend=cleanup;u.onerror=cleanup;
+    try{speechSynthesis.speak(u);}catch(e){cleanup();toast('播放失败：'+e.message);}
+  }
   function toggleTimer(){
     if(timer){clearInterval(timer);timer=null;}else{timer=setInterval(()=>{secs++;$('p-timer').textContent=fmt(secs);$('p-timer').classList.add('run');$('p-status').innerHTML='　计时中…';},1000);}
     renderPractice();
@@ -844,6 +880,7 @@
   /* ---------- Tab ---------- */
   function switchTab(name){
     if(name!=='listen'){ if(curPlayAudio){curPlayAudio.pause();curPlayAudio=null;} followStopAll(); }
+    if(name!=='practice' && 'speechSynthesis' in window){speechSynthesis.cancel();}
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===name));
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
     if(name==='today')renderToday();
