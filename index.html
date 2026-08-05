@@ -221,6 +221,39 @@
     .prompt-edit-wrap:focus-within .prompt-edit-tag{color:var(--sage,#5D8C61);background:rgba(255,255,255,0.95);}
     .prompt-row{display:flex;align-items:stretch;gap:10px;margin-bottom:14px;}
     .prompt-row .prompt-box{flex:1;margin-bottom:0;}
+
+    /* 中文表达 Tab 顶部工具区：参考图 + 直接录音 */
+    .zh-tools{background:linear-gradient(180deg, rgba(255,255,255,0.55), rgba(221,234,221,0.45));
+      border-radius:18px;padding:14px;margin-bottom:16px;border:1px solid rgba(255,255,255,0.6);}
+    .zh-tools-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+    .zh-tools-title{font-size:14px;font-weight:700;color:#5A3A42;flex:1;min-width:140px;}
+    .zh-tools-btns{display:flex;gap:8px;flex-wrap:wrap;}
+    .zh-tools-empty{font-size:13px;color:#7c8a9a;padding:10px 4px 4px;}
+    .zh-tools-empty.hide{display:none;}
+    .zh-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;}
+    .zh-img{position:relative;border-radius:12px;overflow:hidden;background:rgba(255,255,255,0.6);
+      box-shadow:0 2px 8px rgba(0,0,0,0.06);cursor:zoom-in;transition:transform .15s;}
+    .zh-img:hover{transform:translateY(-1px);}
+    .zh-img img{width:100%;height:110px;object-fit:cover;display:block;}
+    .zh-img-del{position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
+      background:rgba(255,255,255,0.85);color:#a8516f;font-size:16px;line-height:1;
+      border:none;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center;
+      transition:all .15s;}
+    .zh-img-del:hover{background:var(--danger,#a8516f);color:#fff;}
+    .zh-img-name{position:absolute;left:0;right:0;bottom:0;padding:4px 6px;
+      font-size:11px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,0.55));
+      text-shadow:0 1px 2px rgba(0,0,0,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+    /* 全屏参考图预览 */
+    .lightbox{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;}
+    .lightbox-mask{position:absolute;inset:0;background:rgba(20,18,40,0.85);}
+    .lightbox-body{position:relative;max-width:92vw;max-height:90vh;display:flex;flex-direction:column;align-items:center;gap:10px;}
+    .lightbox-body img{max-width:92vw;max-height:78vh;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);}
+    .lightbox-cap{color:#fff;font-size:13px;opacity:0.85;text-align:center;}
+    .lightbox-nav{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+    .lightbox-nav .btn{background:rgba(255,255,255,0.15);color:#fff;border-color:transparent;}
+    .lightbox-nav .btn:hover{background:rgba(255,255,255,0.25);}
+    .lightbox-nav .btn:disabled{opacity:0.3;}
     .prompt-demo{flex-shrink:0;width:56px;border-radius:14px;border:1px solid rgba(255,255,255,0.7);
       background:linear-gradient(180deg,#F3C9DC,#E39DB8);color:#fff;font-size:22px;cursor:pointer;
       box-shadow:0 4px 12px rgba(214,138,166,0.25);transition:all .15s;
@@ -478,6 +511,8 @@
       logs:{},
       practiceLogs:{},   // 每条 track 的练习历史：{ trackId: [{id,ts,prompt,secs,minutes,hasAudio,audioId}] }
       customIntros:{},   // 学习卡上方那段提示文字：{ trackId: string }，用户可改
+      customPrompts:{},  // 口语卡顶部 demo 句：{ trackId: string }，用户编辑后覆盖内置示例
+      zhReadImages:[],   // 中文表达 Tab 顶部"图片参考"：[{id,name,dataUrl,addedAt}]，按时间倒序
       ttsConfig:{provider:'',apiKey:'',voice:''},
       prompts:{
         'en-sp':[
@@ -525,6 +560,8 @@
   if(!state.logs) state.logs={};
   if(!state.practiceLogs) state.practiceLogs={};
   if(!state.customIntros) state.customIntros={};
+  if(!state.customPrompts) state.customPrompts={};
+  if(!Array.isArray(state.zhReadImages)) state.zhReadImages=[];
   migrateState(state);
 
   const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
@@ -627,7 +664,12 @@
       '<div class="lc-head"><span class="lc-emoji">'+tr.emoji+'</span><span class="lc-name">'+tr.name+'</span>'+
       '<span class="lc-tag '+(isSpeak?'speak':'study')+'">'+(isSpeak?'口语':'学习')+'</span></div>';
     if(isSpeak){
-      h+='<div class="prompt-box '+(tr.lang==='zh'?'zh':'')+'">'+ (text||'（暂无示例）') +'</div>';
+      const DEFAULT=(text||'');
+      const val=state.customPrompts[tr.id]!=null?state.customPrompts[tr.id]:DEFAULT;
+      h+='<div class="prompt-box prompt-edit-wrap '+(tr.lang==='zh'?'zh':'')+'">'+
+          '<textarea class="prompt-edit" data-role="prompt" data-track="'+tr.id+'" rows="3" placeholder="'+(DEFAULT.replace(/"/g,'&quot;')||'（暂无示例）')+'">'+val+'</textarea>'+
+          '<span class="prompt-edit-tag" title="这段话你可以随便改">✏️ 可编辑</span>'+
+        '</div>';
       if(prompts.length){
         h+='<div class="form-actions" style="justify-content:center;margin-bottom:12px;">'+
           '<button class="btn ghost small" data-act="prev">⬅️ 上句</button>'+
@@ -670,19 +712,141 @@
     const wrap=$('lang-'+tab);if(!wrap)return;
     curLangTab=tab;
     const ids=LANG_TABS[tab]||[];
-    wrap.innerHTML=ids.map(id=>{const tr=trackById(id);return tr?practiceCardHTML(tr):'';}).join('');
+    let html='';
+    // 中文表达 Tab 顶部工具区：图片参考 + 直接录音
+    if(tab==='zh') html+=zhToolsHTML();
+    html+=ids.map(id=>{const tr=trackById(id);return tr?practiceCardHTML(tr):'';}).join('');
+    wrap.innerHTML=html;
     ids.forEach(id=>{const tr=trackById(id);if(tr)wireCard(tr);});
+    if(tab==='zh') wireZhTools();
   }
+
+  function zhToolsHTML(){
+    const imgs=state.zhReadImages||[];
+    return '<div class="zh-tools">'+
+      '<div class="zh-tools-head">'+
+        '<span class="zh-tools-title">📷 朗读参考图（点击放大 · 右键删除）</span>'+
+        '<div class="zh-tools-btns">'+
+          '<button class="btn secondary small" data-zha="pick">📷 添加图片</button>'+
+          '<button class="btn primary small" data-zha="rec">🎙️ 直接录音</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="zh-tools-empty '+(imgs.length?'hide':'')+'">还没有参考图，点「📷 添加图片」上传一张课文截图/书页照，对着读更方便。</div>'+
+      '<div class="zh-images">'+
+        imgs.map((im,i)=>'<div class="zh-img" data-img-id="'+im.id+'" data-idx="'+i+'">'+
+          '<img src="'+im.dataUrl+'" alt="'+escapeHtml(im.name||"参考图")+'" loading="lazy">'+
+          '<button class="zh-img-del" data-zha="del" title="删除这张图">×</button>'+
+          '<div class="zh-img-name">'+escapeHtml(im.name||"参考图")+'</div>'+
+        '</div>').join('')+
+      '</div>'+
+    '</div>';
+  }
+
+  function wireZhTools(){
+    const wrap=$('lang-zh');if(!wrap)return;
+    wrap.querySelector('[data-zha="pick"]').onclick=()=>{
+      const inp=document.createElement('input');
+      inp.type='file';inp.accept='image/*';
+      inp.onchange=()=>{const f=inp.files&&inp.files[0];if(f)addZhImage(f);};
+      inp.click();
+    };
+    wrap.querySelector('[data-zha="rec"]').onclick=()=>{
+      const tr=trackById('zh-read');if(!tr)return;
+      // 滚到该卡 + 启动录音
+      const card=document.querySelector('.lang-card[data-track="zh-read"]');
+      if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
+      toggleRec(tr);
+    };
+    wrap.querySelectorAll('[data-zha="del"]').forEach(b=>b.onclick=ev=>{
+      ev.stopPropagation();
+      const imgEl=b.closest('.zh-img');
+      const id=imgEl&&imgEl.dataset.imgId;
+      if(id)armRemoveZhImage(imgEl,id);
+    });
+    wrap.querySelectorAll('.zh-img img').forEach(img=>img.onclick=ev=>{
+      const imgEl=ev.currentTarget.closest('.zh-img');
+      const idx=parseInt(imgEl.dataset.idx||'0',10);
+      openZhLightbox(idx);
+    });
+  }
+
+  function addZhImage(file){
+    if(!file||!file.type.startsWith('image/')){toast('请选择图片文件');return;}
+    if((state.zhReadImages||[]).length>=8){toast('参考图最多 8 张');return;}
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        // canvas 缩放到宽 800px 减少存储
+        const MAX=800;
+        const scale=Math.min(1, MAX/img.width);
+        const w=Math.round(img.width*scale), h=Math.round(img.height*scale);
+        const c=document.createElement('canvas');c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        const dataUrl=c.toDataURL('image/jpeg',0.82);
+        const item={id:genId(),name:file.name.replace(/\\.[^.]+$/,''),dataUrl,addedAt:Date.now()};
+        state.zhReadImages=[item,...(state.zhReadImages||[])];
+        save();
+        renderLangTab('zh');
+        toast('已添加 1 张参考图 ✅');
+      };
+      img.onerror=()=>toast('图片读取失败');
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function armRemoveZhImage(imgEl,id){
+    const btn=imgEl.querySelector('.zh-img-del');
+    if(btn.dataset.arm==='1'){
+      btn.dataset.arm='0';clearTimeout(btn._t);
+      const orig=btn._origHTML;
+      state.zhReadImages=(state.zhReadImages||[]).filter(x=>x.id!==id);
+      save();
+      renderLangTab('zh');
+      toast('已删除参考图');
+      return;
+    }
+    btn.dataset.arm='1';
+    btn._origHTML=btn.innerHTML;
+    btn.innerHTML='×';
+    btn.style.background='var(--danger,#a8516f)';
+    btn.style.color='#fff';
+    btn._t=setTimeout(()=>{
+      btn.dataset.arm='0';btn.innerHTML=btn._origHTML;
+      btn.style.background='';btn.style.color='';
+    },2500);
+  }
+
+  function openZhLightbox(idx){
+    const imgs=state.zhReadImages||[];
+    if(!imgs.length)return;
+    closeZhLightbox();
+    const lb=document.createElement('div');lb.className='lightbox';
+    lb.dataset.idx=idx;
+    lb.innerHTML='<div class="lightbox-mask"></div>'+
+      '<div class="lightbox-body">'+
+        '<img src="'+imgs[idx].dataUrl+'" alt="'+escapeHtml(imgs[idx].name||"参考图")+'">'+
+        '<div class="lightbox-cap">'+(idx+1)+' / '+imgs.length+' · '+escapeHtml(imgs[idx].name||"参考图")+'</div>'+
+        '<div class="lightbox-nav">'+
+          (idx>0?'<button class="btn ghost small" data-lb="prev">⬅ 上一张</button>':'<button class="btn ghost small" disabled>⬅ 上一张</button>')+
+          '<button class="btn ghost small" data-lb="close">✕ 关闭</button>'+
+          (idx<imgs.length-1?'<button class="btn ghost small" data-lb="next">下一张 ➡</button>':'<button class="btn ghost small" disabled>下一张 ➡</button>')+
+        '</div>'+
+      '</div>';
+    document.body.appendChild(lb);
+    lb.querySelector('[data-lb="close"]').onclick=closeZhLightbox;
+    lb.querySelector('[data-lb="prev"]')?.addEventListener('click',()=>openZhLightbox(idx-1));
+    lb.querySelector('[data-lb="next"]')?.addEventListener('click',()=>openZhLightbox(idx+1));
+    lb.querySelector('.lightbox-mask').onclick=closeZhLightbox;
+  }
+  function closeZhLightbox(){document.querySelectorAll('.lightbox').forEach(n=>n.remove());}
+
 
   function wireCard(tr){
     const card=document.querySelector('.lang-card[data-track="'+tr.id+'"]');if(!card)return;
     const st=ps[tr.id];const isSpeak=tr.type==='speak';
     const prompts=isSpeak?state.prompts[tr.id]||[]:[];
-    if(isSpeak){
-      card.querySelector('[data-act="prev"]').onclick=()=>{st.promptIdx=(st.promptIdx-1+prompts.length)%prompts.length;renderLangTab(curLangTab);};
-      card.querySelector('[data-act="next"]').onclick=()=>{st.promptIdx=(st.promptIdx+1)%prompts.length;renderLangTab(curLangTab);};
-      card.querySelector('[data-act="rand"]').onclick=()=>{if(prompts.length)st.promptIdx=Math.floor(Math.random()*prompts.length);renderLangTab(curLangTab);};
-    }
     card.querySelector('[data-act="timer"]').onclick=()=>toggleTimer(tr);
     if(isSpeak)card.querySelector('[data-act="rec"]').onclick=()=>toggleRec(tr);
     const db=card.querySelector('[data-act="discard"]');if(db)db.onclick=()=>{if(st.recUrl)URL.revokeObjectURL(st.recUrl);st.recUrl=null;renderLangTab(curLangTab);toast('已删除录音 🗑');};
@@ -708,6 +872,34 @@
           save();
         }
       });
+    }
+    // 口语卡的 demo 句：可编辑文本框，input 写 state.customPrompts
+    if(isSpeak){
+      const pe=card.querySelector('[data-role="prompt"]');
+      if(pe){
+        let _pT=null;
+        pe.addEventListener('input',()=>{
+          if(_pT)clearTimeout(_pT);
+          _pT=setTimeout(()=>{
+            state.customPrompts[tr.id]=pe.value;
+            save();
+          },300);
+        });
+        pe.addEventListener('blur',()=>{
+          const v=(pe.value||'').trim();
+          if(!v){
+            const DEFAULT=cur?cur.text:'';
+            pe.value=DEFAULT;
+            state.customPrompts[tr.id]=DEFAULT;
+            save();
+          }
+        });
+      }
+      // "换一句/上句/下句" 切回内置示例：清掉 customPrompts，重新渲染让 textarea 读新示例
+      const clear=()=>{if(state.customPrompts[tr.id]!=null){delete state.customPrompts[tr.id];save();}};
+      if(card.querySelector('[data-act="prev"]'))card.querySelector('[data-act="prev"]').onclick=()=>{clear();st.promptIdx=(st.promptIdx-1+prompts.length)%prompts.length;renderLangTab(curLangTab);};
+      if(card.querySelector('[data-act="next"]'))card.querySelector('[data-act="next"]').onclick=()=>{clear();st.promptIdx=(st.promptIdx+1)%prompts.length;renderLangTab(curLangTab);};
+      if(card.querySelector('[data-act="rand"]'))card.querySelector('[data-act="rand"]').onclick=()=>{clear();if(prompts.length)st.promptIdx=Math.floor(Math.random()*prompts.length);renderLangTab(curLangTab);};
     }
     renderPracticeLogs(card, tr);
   }
@@ -1087,15 +1279,19 @@
       if(!confirm('导入将覆盖当前数据，确定？'))return;migrateState(d);
       const keepLogs=(state.practiceLogs&&Object.keys(state.practiceLogs).length)?state.practiceLogs:(d.practiceLogs||{});
       const keepIntros=(state.customIntros&&Object.keys(state.customIntros).length)?state.customIntros:(d.customIntros||{});
-      state=d; state.practiceLogs=keepLogs; state.customIntros=keepIntros; save(); renderAll(); toast('已导入 ✅');}
+      const keepPrompts=(state.customPrompts&&Object.keys(state.customPrompts).length)?state.customPrompts:(d.customPrompts||{});
+      const keepImgs=(state.zhReadImages&&state.zhReadImages.length)?state.zhReadImages:(d.zhReadImages||[]);
+      state=d; state.practiceLogs=keepLogs; state.customIntros=keepIntros; state.customPrompts=keepPrompts; state.zhReadImages=keepImgs; save(); renderAll(); toast('已导入 ✅');}
       catch(e){toast('解析失败');}};
     r.readAsText(file);
   }
   function clearData(){
-    if(!confirm('清空所有打卡与素材？练习记录、自定义提示语会保留。此操作不可恢复！'))return;
+    if(!confirm('清空所有打卡与素材？练习记录、自定义提示语、参考图会保留。此操作不可恢复！'))return;
     const keepLogs=state.practiceLogs||{};
     const keepIntros=state.customIntros||{};
-    state=defaultState(); state.practiceLogs=keepLogs; state.customIntros=keepIntros; save();renderAll();toast('已清空');
+    const keepPrompts=state.customPrompts||{};
+    const keepImgs=state.zhReadImages||[];
+    state=defaultState(); state.practiceLogs=keepLogs; state.customIntros=keepIntros; state.customPrompts=keepPrompts; state.zhReadImages=keepImgs; save();renderAll();toast('已清空');
   }
 
   /* ---------- 开屏 ---------- */
