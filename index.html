@@ -186,13 +186,15 @@
     .prompt-box.zh{font-size:20px;}
     .prompt-row{display:flex;align-items:stretch;gap:10px;margin-bottom:14px;}
     .prompt-row .prompt-box{flex:1;margin-bottom:0;}
-    .prompt-tts{flex-shrink:0;width:54px;border-radius:14px;border:1px solid rgba(255,255,255,0.7);
-      background:linear-gradient(180deg,#F3C9DC,#E39DB8);color:#fff;font-size:24px;cursor:pointer;
+    .prompt-demo{flex-shrink:0;width:56px;border-radius:14px;border:1px solid rgba(255,255,255,0.7);
+      background:linear-gradient(180deg,#F3C9DC,#E39DB8);color:#fff;font-size:22px;cursor:pointer;
       box-shadow:0 4px 12px rgba(214,138,166,0.25);transition:all .15s;
-      display:flex;align-items:center;justify-content:center;padding:0;}
-    .prompt-tts:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(214,138,166,0.35);}
-    .prompt-tts:active{transform:translateY(0);}
-    .prompt-tts.playing{background:linear-gradient(180deg,#E8B4CC,#C97497);animation:pulse 1.2s infinite;}
+      display:flex;align-items:center;justify-content:center;padding:0;line-height:1.1;}
+    .prompt-demo:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(214,138,166,0.35);}
+    .prompt-demo:active{transform:translateY(0);}
+    .prompt-demo.upload{background:rgba(255,255,255,0.55);color:var(--rose);font-size:11px;font-weight:700;flex-direction:column;gap:2px;}
+    .prompt-demo.playing{background:linear-gradient(180deg,#E8B4CC,#C97497);animation:pulse 1.2s infinite;}
+    .pact{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
     .rec-area{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
     .timer{font-size:34px;font-weight:800;color:#5A3A42;text-align:center;font-variant-numeric:tabular-nums;letter-spacing:.02em;}
     .timer.run{color:var(--rose);}
@@ -333,6 +335,7 @@
           <button class="btn ghost small" id="btn-del-all-audio" style="display:none">清空听力库</button>
         </div>
         <input type="file" id="audio-file" accept="audio/*" multiple style="display:none" />
+        <input type="file" id="demo-file" accept="audio/*" style="display:none" />
         <div id="audio-list"></div>
       </div>
     </section>
@@ -363,6 +366,24 @@
         </div>
         <input type="file" id="import-file" accept="application/json" style="display:none" />
         <p class="note">数据仅存在本机浏览器（localStorage），不会上传。换设备请先导出再导入。</p>
+      </div>
+      <div class="panel">
+        <h2>🌐 云发音 <small>可选 · 真人音色（即将推出）</small></h2>
+        <p class="sub">浏览器自带的朗读音色你可能不喜欢。可以填一个云 TTS 的 key，以后点「🌟 示范音」就走自然音色。当前版本仅保存配置，播放尚未接入。</p>
+        <div class="field"><label>服务商</label>
+          <select id="tts-provider">
+            <option value="openai">OpenAI TTS（自然，推荐）</option>
+            <option value="edge">Edge TTS（免费）</option>
+            <option value="azure">Azure TTS</option>
+          </select>
+        </div>
+        <div class="field"><label>API Key</label><input id="tts-key" type="password" placeholder="粘贴你的 API key（仅存本机）" /></div>
+        <div class="field"><label>音色名（可选）</label><input id="tts-voice" type="text" placeholder="如：alloy / nova（留空用默认）" /></div>
+        <div class="form-actions">
+          <button class="btn primary" id="tts-save">💾 保存配置</button>
+          <button class="btn ghost" id="tts-test" disabled title="配置已保存，播放功能后续版本接入">🔊 试听（即将推出）</button>
+        </div>
+        <p class="note">配置只存在本机浏览器，不会上传到任何服务器。接入播放前不会消耗你的额度。</p>
       </div>
       <div class="panel">
         <h2>🌹 关于</h2>
@@ -404,40 +425,52 @@
         {id:'ru-sp',name:'俄语口语',type:'speak',emoji:'🗣️',lang:'ru'}
       ],
       logs:{},
+      ttsConfig:{provider:'',apiKey:'',voice:''},
       prompts:{
         'en-sp':[
-          "How was your day? Tell me one good thing that happened.",
-          "If you could travel anywhere tomorrow, where would you go and why?",
-          "Describe your favorite meal in as much detail as possible.",
-          "What are you grateful for today, and why?",
-          "Explain a hobby of yours to someone who has never tried it.",
-          "What does success mean to you?"
+          {id:'es1',text:"How was your day? Tell me one good thing that happened."},
+          {id:'es2',text:"If you could travel anywhere tomorrow, where would you go and why?"},
+          {id:'es3',text:"Describe your favorite meal in as much detail as possible."},
+          {id:'es4',text:"What are you grateful for today, and why?"},
+          {id:'es5',text:"Explain a hobby of yours to someone who has never tried it."},
+          {id:'es6',text:"What does success mean to you?"}
         ],
         'zh-read':[
-          "今天天气真好，我想去公园走走，看看花，听听鸟叫。",
-          "学习一门语言，最重要的是每天坚持，哪怕只有十分钟。",
-          "小王子说，真正重要的东西，用眼睛是看不见的。",
-          "风轻轻吹过，树叶沙沙作响，像在低声说着什么。",
-          "试着用不同的语气读这句话：你，真的懂我吗？",
-          "请用温柔的语气朗读：慢慢来，比较快。"
+          {id:'zs1',text:"今天天气真好，我想去公园走走，看看花，听听鸟叫。"},
+          {id:'zs2',text:"学习一门语言，最重要的是每天坚持，哪怕只有十分钟。"},
+          {id:'zs3',text:"小王子说，真正重要的东西，用眼睛是看不见的。"},
+          {id:'zs4',text:"风轻轻吹过，树叶沙沙作响，像在低声说着什么。"},
+          {id:'zs5',text:"试着用不同的语气读这句话：你，真的懂我吗？"},
+          {id:'zs6',text:"请用温柔的语气朗读：慢慢来，比较快。"}
         ],
         'ru-sp':[
-          "Здравствуйте! Меня зовут Сuki. Очень приятно.",
-          "Как ваши дела сегодня?",
-          "Я учу русский язык каждый день.",
-          "Расскажите о своём любимом времени года.",
-          "Что вы делали в выходные?",
-          "Мой любимый цвет — синий, как ночное небо."
+          {id:'rs1',text:"Здравствуйте! Меня зовут Сuki. Очень приятно."},
+          {id:'rs2',text:"Как ваши дела сегодня?"},
+          {id:'rs3',text:"Я учу русский язык каждый день."},
+          {id:'rs4',text:"Расскажите о своём любимом времени года."},
+          {id:'rs5',text:"Что вы делали в выходные?"},
+          {id:'rs6',text:"Мой любимый цвет — синий, как ночное небо."}
         ]
       }
     };
+  }
+  const genId=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  function migrateState(s){
+    if(!s.prompts)s.prompts=defaultState().prompts;
+    if(!s.ttsConfig)s.ttsConfig={provider:'',apiKey:'',voice:''};
+    Object.keys(s.prompts).forEach(k=>{
+      if(Array.isArray(s.prompts[k])){
+        s.prompts[k]=s.prompts[k].map(p=>(typeof p==='string')?{id:genId(),text:p}:(p&&p.text)?{id:p.id||genId(),text:p.text}:{id:genId(),text:String(p)});
+      }
+    });
+    return s;
   }
 
   let state;
   try{ state = JSON.parse(localStorage.getItem(STATE_KEY)) || defaultState(); }
   catch(e){ state = defaultState(); }
   if(!state.logs) state.logs={};
-  if(!state.prompts) state.prompts=defaultState().prompts;
+  migrateState(state);
 
   const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
   const $=id=>document.getElementById(id);
@@ -519,12 +552,16 @@
     if(!tr){body.innerHTML='<div class="empty-state"><span class="e-ico">🪐</span>请选择一颗星球</div>';return;}
     const isSpeak=tr.type==='speak';
     const prompts=isSpeak?state.prompts[tr.id]||[]:[];
-    const cur=prompts[curPromptIdx]||'';
+    const curPrompt=prompts[curPromptIdx]||null;
+    const cur=curPrompt?curPrompt.text:'';
+    const demoClip=curPrompt?demoOf(curTrack,curPrompt.id):null;
     let html='';
     if(isSpeak){
       html+='<div class="prompt-row">'+
         '<div class="prompt-box '+(tr.lang==='zh'?'zh':'')+'">'+ (cur||'（暂无素材，去素材库添加）') +'</div>'+
-        '<button class="prompt-tts" id="p-tts" title="🔊 浏览器内置示范发音（再次点击可停止）" aria-label="播放示范发音">🔊</button>'+
+        (demoClip
+          ? '<button class="prompt-demo" id="p-demo" title="🌟 播放示范音（再次点击停止）">🌟</button>'
+          : '<button class="prompt-demo upload" id="p-demo" title="上传示范音（你自己的真人发音）">📤<span>上传</span></button>')+
       '</div>';
       if(prompts.length){
         html+='<div class="form-actions" style="justify-content:center;margin-bottom:14px;">'+
@@ -566,17 +603,13 @@
     body.innerHTML=html;
 
     if(isSpeak){
-      $('p-prev').onclick=()=>{if('speechSynthesis' in window)speechSynthesis.cancel();curPromptIdx=(curPromptIdx-1+prompts.length)%prompts.length;renderPractice();};
-      $('p-next').onclick=()=>{if('speechSynthesis' in window)speechSynthesis.cancel();curPromptIdx=(curPromptIdx+1)%prompts.length;renderPractice();};
-      $('p-rand').onclick=()=>{if('speechSynthesis' in window)speechSynthesis.cancel();if(prompts.length)curPromptIdx=Math.floor(Math.random()*prompts.length);renderPractice();};
-      const ttsBtn=$('p-tts');
-      if(ttsBtn){
-        const langCode=TTS_LANG[curTrack];
-        if(langCode && cur){
-          ttsBtn.onclick=()=>speakPrompt(cur,langCode,ttsBtn);
-        }else{
-          ttsBtn.disabled=true;ttsBtn.style.opacity='0.45';ttsBtn.title=cur?'当前语言未配置 TTS':'暂无文字可读';
-        }
+      $('p-prev').onclick=()=>{stopDemo();curPromptIdx=(curPromptIdx-1+prompts.length)%prompts.length;renderPractice();};
+      $('p-next').onclick=()=>{stopDemo();curPromptIdx=(curPromptIdx+1)%prompts.length;renderPractice();};
+      $('p-rand').onclick=()=>{stopDemo();if(prompts.length)curPromptIdx=Math.floor(Math.random()*prompts.length);renderPractice();};
+      const demoBtn=$('p-demo');
+      if(demoBtn){
+        if(demoClip){ demoBtn.onclick=()=>playDemo(demoClip,demoBtn); }
+        else { demoBtn.onclick=()=>{pendingDemo={trackId:curTrack,sid:curPrompt.id};$('demo-file').click();}; }
       }
     }
     $('p-timer-btn').onclick=toggleTimer;
@@ -587,19 +620,17 @@
 
   function fmt(s){const m=Math.floor(s/60),x=s%60;return String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
 
-  const TTS_LANG={'en-sp':'en-US','zh-sp':'zh-CN','ru-sp':'ru-RU'};
-  function speakPrompt(text,langCode,btn){
-    if(!('speechSynthesis' in window)){toast('当前浏览器不支持语音合成 😅');return;}
-    if(!text){toast('暂无文字可读');return;}
-    // 点同一个按钮 → 停止
-    if(speechSynthesis.speaking && btn.dataset.playing==='1'){speechSynthesis.cancel();return;}
-    speechSynthesis.cancel();
-    const u=new SpeechSynthesisUtterance(text);
-    u.lang=langCode;u.rate=0.92;u.pitch=1.0;
-    btn.dataset.playing='1';btn.textContent='⏹';btn.classList.add('playing');
-    const cleanup=()=>{btn.dataset.playing='';btn.textContent='🔊';btn.classList.remove('playing');};
-    u.onend=cleanup;u.onerror=cleanup;
-    try{speechSynthesis.speak(u);}catch(e){cleanup();toast('播放失败：'+e.message);}
+  let pendingDemo=null;
+  function demoOf(trackId,sid){return sid?demoMap[trackId+':'+sid]:null;}
+  function stopDemo(){ if(curPlayAudio){curPlayAudio.pause();curPlayAudio=null;} }
+  function playDemo(clip,btn){
+    stopDemo();
+    const a=new Audio(clip.url);
+    curPlayAudio=a;
+    if(btn){btn.classList.add('playing');btn.textContent='⏹';}
+    a.onended=()=>{if(btn){btn.classList.remove('playing');btn.textContent='🌟';}curPlayAudio=null;};
+    a.onerror=()=>{if(btn){btn.classList.remove('playing');btn.textContent='🌟';}curPlayAudio=null;toast('示范音播放失败');};
+    a.play().catch(()=>toast('播放失败'));
   }
   function toggleTimer(){
     if(timer){clearInterval(timer);timer=null;}else{timer=setInterval(()=>{secs++;$('p-timer').textContent=fmt(secs);$('p-timer').classList.add('run');$('p-status').innerHTML='　计时中…';},1000);}
@@ -643,8 +674,13 @@
     const list=state.prompts[libTrack]||[];
     let html='<div class="table-wrap">';
     if(!list.length)html+='<div class="empty-state">暂无素材，下面添加一句吧</div>';
-    list.forEach((p,i)=>{
-      html+='<div class="prow"><div class="ptxt">'+escapeHtml(p)+'</div><div class="pact"><button class="btn danger tiny" data-del="'+i+'">删除</button></div></div>';
+    list.forEach(p=>{
+      const clip=demoOf(libTrack,p.id);
+      html+='<div class="prow"><div class="ptxt">'+escapeHtml(p.text)+'</div><div class="pact">'+
+        (clip?'<button class="btn secondary tiny" data-play="'+p.id+'">🌟 听</button>':'')+
+        '<button class="btn ghost tiny" data-up="'+p.id+'">📤 示范音</button>'+
+        '<button class="btn danger tiny" data-del="'+p.id+'">删除</button>'+
+      '</div></div>';
     });
     html+='</div>';
     html+='<div class="panel" style="margin-top:16px;padding:18px;">'+
@@ -653,14 +689,22 @@
       '<div class="form-actions"><button class="btn primary" id="lib-add">添加</button></div>'+
     '</div>';
     body.innerHTML=html;
-    body.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{state.prompts[libTrack].splice(+b.dataset.del,1);save();renderLibrary();toast('已删除');});
-    $('lib-add').onclick=()=>{const v=$('lib-new').value.trim();if(!v){toast('先写点什么');return;}state.prompts[libTrack]=state.prompts[libTrack]||[];state.prompts[libTrack].push(v);save();$('lib-new').value='';renderLibrary();toast('已添加 🌱');};
+    body.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>{const c=demoOf(libTrack,b.dataset.play);if(c)playDemo(c,null);});
+    body.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>{pendingDemo={trackId:libTrack,sid:b.dataset.up};$('demo-file').click();});
+    body.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
+      const sid=b.dataset.del;const idx=list.findIndex(p=>p.id===sid);
+      if(idx>=0)list.splice(idx,1);
+      const c=demoOf(libTrack,sid);
+      if(c){idbDel(c.id).catch(()=>{});const ci=audioClips.findIndex(x=>x.id===c.id);if(ci>=0){URL.revokeObjectURL(audioClips[ci].url);audioClips.splice(ci,1);}delete demoMap[libTrack+':'+sid];}
+      save();renderLibrary();toast('已删除');
+    });
+    $('lib-add').onclick=()=>{const v=$('lib-new').value.trim();if(!v){toast('先写点什么');return;}state.prompts[libTrack]=state.prompts[libTrack]||[];state.prompts[libTrack].push({id:genId(),text:v});save();$('lib-new').value='';renderLibrary();toast('已添加 🌱');};
   }
   function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 
   /* ---------- 听力库（IndexedDB 存音频） ---------- */
   const AUDIO_DB='langPlanetAudio';
-  let audioDB=null, audioClips=[], curPlayAudio=null, followState=null;
+  let audioDB=null, audioClips=[], curPlayAudio=null, followState=null, demoMap={};
   function openAudioDB(){
     return new Promise((res,rej)=>{
       const req=indexedDB.open(AUDIO_DB,1);
@@ -678,8 +722,26 @@
     if(typeof indexedDB==='undefined'){renderListen();return;}
     openAudioDB().then(()=>idbAll()).then(list=>{
       audioClips=list.map(c=>({...c,url:URL.createObjectURL(c.blob)}));
-      renderListen();
+      demoMap={};audioClips.forEach(c=>{if(c.kind==='demo')demoMap[c.trackId+':'+c.sentenceId]=c;});
+      renderListen();renderPractice();renderLibrary();
     }).catch(()=>renderListen());
+  }
+
+  async function importDemo(file,trackId,sid){
+    if(!audioDB){try{await openAudioDB();}catch(e){toast('音频库不可用');return;}}
+    const id='demo:'+trackId+':'+sid;
+    const name=(file.name||'').replace(/\.[^.]+$/,'')||'示范音';
+    const clip={id,name,kind:'demo',trackId,sentenceId:sid,type:file.type,size:file.size,addedAt:todayStr(),blob:file,duration:null};
+    const tmp=URL.createObjectURL(file);
+    try{clip.duration=await getDuration(tmp);}catch(e){}
+    URL.revokeObjectURL(tmp);
+    try{await idbPut(clip);}catch(e){toast('保存失败');return;}
+    const old=audioClips.findIndex(x=>x.id===id);
+    if(old>=0){URL.revokeObjectURL(audioClips[old].url);audioClips.splice(old,1);}
+    audioClips.push({...clip,url:URL.createObjectURL(file)});
+    demoMap[trackId+':'+sid]=audioClips[audioClips.length-1];
+    toast('🌟 示范音已保存');
+    renderLibrary();renderPractice();
   }
 
   async function importAudio(files){
@@ -860,7 +922,7 @@
   function importData(file){
     const r=new FileReader();
     r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.tracks||!d.logs){toast('文件格式不对');return;}
-      if(!confirm('导入将覆盖当前数据，确定？'))return;state=d;save();curTrack=null;libTrack=null;renderAll();toast('已导入 ✅');}
+      if(!confirm('导入将覆盖当前数据，确定？'))return;migrateState(d);state=d;save();curTrack=null;libTrack=null;renderAll();toast('已导入 ✅');}
       catch(e){toast('解析失败');}};
     r.readAsText(file);
   }
@@ -880,7 +942,7 @@
   /* ---------- Tab ---------- */
   function switchTab(name){
     if(name!=='listen'){ if(curPlayAudio){curPlayAudio.pause();curPlayAudio=null;} followStopAll(); }
-    if(name!=='practice' && 'speechSynthesis' in window){speechSynthesis.cancel();}
+    if(name!=='practice') stopDemo();
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active',p.id===name));
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
     if(name==='today')renderToday();
@@ -912,12 +974,21 @@
   $('btn-clear').onclick=clearData;
   $('btn-import-audio').onclick=()=>$('audio-file').click();
   $('audio-file').onchange=e=>{if(e.target.files&&e.target.files.length)importAudio(e.target.files);e.target.value='';};
+  $('demo-file').onchange=e=>{const f=e.target.files&&e.target.files[0];if(f&&pendingDemo){importDemo(f,pendingDemo.trackId,pendingDemo.sid);}e.target.value='';pendingDemo=null;};
   $('btn-del-all-audio').onclick=async()=>{
     if(!confirm('清空听力库全部音频？此操作不可恢复！'))return;
     if(audioDB){const tx=audioDB.transaction('clips','readwrite');tx.objectStore('clips').clear();}
     audioClips.forEach(c=>{if(c.url)URL.revokeObjectURL(c.url);});
     audioClips=[];followStopAll();renderListen();toast('听力库已清空');
   };
+
+  // 云 TTS 配置（预留接口，暂不接入播放）
+  try{
+    $('tts-provider').value=state.ttsConfig.provider||'openai';
+    $('tts-key').value=state.ttsConfig.apiKey||'';
+    $('tts-voice').value=state.ttsConfig.voice||'';
+    $('tts-save').onclick=()=>{state.ttsConfig={provider:$('tts-provider').value,apiKey:$('tts-key').value.trim(),voice:$('tts-voice').value.trim()};save();toast('🌐 云发音配置已保存（播放待接入）');};
+  }catch(e){}
 
   initTitle();
   curTrack=state.tracks.find(t=>t.type==='speak')?state.tracks.find(t=>t.type==='speak').id:state.tracks[0].id;
