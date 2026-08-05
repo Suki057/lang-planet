@@ -204,6 +204,21 @@
     .prompt-box{background:rgba(255,255,255,0.7);border-radius:14px;padding:18px;margin-bottom:14px;border:1px solid rgba(255,255,255,0.7);
       font-size:18px;line-height:1.7;color:#3a3348;min-height:80px;display:flex;align-items:center;}
     .prompt-box.zh{font-size:20px;}
+    /* 学习卡顶部那段"自由学习时间…" → 可编辑文本框 */
+    .prompt-edit-wrap{position:relative;display:block;padding:14px 16px;}
+    .prompt-edit{
+      width:100%;min-height:60px;max-height:160px;resize:vertical;
+      background:transparent;border:none;outline:none;
+      font-family:inherit;font-size:16.5px;line-height:1.7;color:#3a3348;
+      padding:0;margin:0;
+    }
+    .prompt-edit::placeholder{color:rgba(58,51,72,0.35);font-style:italic;}
+    .prompt-edit-wrap{border:1px dashed rgba(143,176,203,0.5);}
+    .prompt-edit-wrap:focus-within{border-color:var(--sage,#5D8C61);border-style:solid;background:rgba(255,255,255,0.85);}
+    .prompt-edit-tag{position:absolute;top:6px;right:10px;font-size:10.5px;color:#7c8a9a;
+      background:rgba(255,255,255,0.7);padding:2px 8px;border-radius:999px;
+      pointer-events:none;letter-spacing:0.3px;}
+    .prompt-edit-wrap:focus-within .prompt-edit-tag{color:var(--sage,#5D8C61);background:rgba(255,255,255,0.95);}
     .prompt-row{display:flex;align-items:stretch;gap:10px;margin-bottom:14px;}
     .prompt-row .prompt-box{flex:1;margin-bottom:0;}
     .prompt-demo{flex-shrink:0;width:56px;border-radius:14px;border:1px solid rgba(255,255,255,0.7);
@@ -462,6 +477,7 @@
       ],
       logs:{},
       practiceLogs:{},   // 每条 track 的练习历史：{ trackId: [{id,ts,prompt,secs,minutes,hasAudio,audioId}] }
+      customIntros:{},   // 学习卡上方那段提示文字：{ trackId: string }，用户可改
       ttsConfig:{provider:'',apiKey:'',voice:''},
       prompts:{
         'en-sp':[
@@ -508,6 +524,7 @@
   catch(e){ state = defaultState(); }
   if(!state.logs) state.logs={};
   if(!state.practiceLogs) state.practiceLogs={};
+  if(!state.customIntros) state.customIntros={};
   migrateState(state);
 
   const save=()=>localStorage.setItem(STATE_KEY,JSON.stringify(state));
@@ -619,7 +636,12 @@
         '</div>';
       }
     } else {
-      h+='<div class="prompt-box">自由学习时间～读单词、看课文、做练习都可以，记下这段时长就好。</div>';
+      const DEFAULT='自由学习时间～读单词、看课文、做练习都可以，记下这段时长就好。';
+      const val=state.customIntros[tr.id]!=null?state.customIntros[tr.id]:DEFAULT;
+      h+='<div class="prompt-box prompt-edit-wrap">'+
+          '<textarea class="prompt-edit" data-role="intro" data-track="'+tr.id+'" rows="3" placeholder="'+DEFAULT+'">'+val+'</textarea>'+
+          '<span class="prompt-edit-tag" title="这段话你可以随便改">✏️ 可编辑</span>'+
+        '</div>';
     }
     h+='<div class="rec-area">'+
       '<div class="timer'+(st.timer?' run':'')+'" data-role="timer">'+fmt(st.secs)+'</div>'+
@@ -665,6 +687,28 @@
     if(isSpeak)card.querySelector('[data-act="rec"]').onclick=()=>toggleRec(tr);
     const db=card.querySelector('[data-act="discard"]');if(db)db.onclick=()=>{if(st.recUrl)URL.revokeObjectURL(st.recUrl);st.recUrl=null;renderLangTab(curLangTab);toast('已删除录音 🗑');};
     card.querySelector('[data-act="save"]').onclick=()=>saveSession(tr);
+    // 学习卡的顶部提示：可编辑文本框，input 时实时保存
+    const introEl=card.querySelector('[data-role="intro"]');
+    if(introEl){
+      let _introT=null;
+      introEl.addEventListener('input',()=>{
+        if(_introT)clearTimeout(_introT);
+        _introT=setTimeout(()=>{
+          state.customIntros[tr.id]=introEl.value;
+          save();
+        },300);
+      });
+      // 失焦时如果内容空了就恢复默认，方便用户撤销
+      introEl.addEventListener('blur',()=>{
+        const v=(introEl.value||'').trim();
+        if(!v){
+          const DEFAULT='自由学习时间～读单词、看课文、做练习都可以，记下这段时长就好。';
+          introEl.value=DEFAULT;
+          state.customIntros[tr.id]=DEFAULT;
+          save();
+        }
+      });
+    }
     renderPracticeLogs(card, tr);
   }
 
@@ -1042,13 +1086,16 @@
     r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.tracks||!d.logs){toast('文件格式不对');return;}
       if(!confirm('导入将覆盖当前数据，确定？'))return;migrateState(d);
       const keepLogs=(state.practiceLogs&&Object.keys(state.practiceLogs).length)?state.practiceLogs:(d.practiceLogs||{});
-      state=d; state.practiceLogs=keepLogs; save(); renderAll(); toast('已导入 ✅');}
+      const keepIntros=(state.customIntros&&Object.keys(state.customIntros).length)?state.customIntros:(d.customIntros||{});
+      state=d; state.practiceLogs=keepLogs; state.customIntros=keepIntros; save(); renderAll(); toast('已导入 ✅');}
       catch(e){toast('解析失败');}};
     r.readAsText(file);
   }
   function clearData(){
-    if(!confirm('清空所有打卡与素材？练习记录会保留。此操作不可恢复！'))return;
-    state=defaultState(); state.practiceLogs=state.practiceLogs||{}; save();renderAll();toast('已清空');
+    if(!confirm('清空所有打卡与素材？练习记录、自定义提示语会保留。此操作不可恢复！'))return;
+    const keepLogs=state.practiceLogs||{};
+    const keepIntros=state.customIntros||{};
+    state=defaultState(); state.practiceLogs=keepLogs; state.customIntros=keepIntros; save();renderAll();toast('已清空');
   }
 
   /* ---------- 开屏 ---------- */
